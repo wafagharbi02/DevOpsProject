@@ -1,13 +1,11 @@
 pipeline {
     agent any
-    tools {
-        maven 'Maven'
-        jdk 'JDK'
-    }
+
     stages {
         stage('Checkout') {
             steps {
                 echo 'Récupération du code GitHub...'
+                checkout scm
             }
         }
         stage('Compile & Test') {
@@ -22,6 +20,7 @@ pipeline {
             }
         }
     }
+
     post {
         always {
             junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
