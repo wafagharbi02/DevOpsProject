@@ -1,51 +1,72 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'M2_HOME'   
-        jdk   'JAVA_HOME'  
+    environment {
+        DOCKER_IMAGE = "wafagharbi02/student-app"
     }
 
     stages {
-        stage('Checkout') {
+        stage('Hello') {
             steps {
-                echo 'Clonage du dépôt GitHub...'
-                checkout scm
+                echo 'Hello World'
             }
         }
 
-        stage('Build & Tests') {
+        stage('GIT') {
             steps {
-                echo 'Compilation et exécution des tests...'
-                sh 'mvn clean verify'
+                echo "Getting Project from Git"
+                git branch: 'main', url: 'https://github.com/wafagharbi02/DevOpsProject.git'
             }
         }
 
-        stage('Package') {
+        stage('MVN CLEAN') {
             steps {
-                echo 'Génération du fichier JAR...'
-                sh 'mvn package'
+                sh 'mvn clean'
             }
         }
 
-        stage('Archive Artifact') {
+        stage('MVN COMPILE') {
             steps {
-                echo 'Archivage du JAR généré...'
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
+                sh 'mvn compile'
             }
         }
-    }
 
-    post {
-        always {
-            echo 'Publication des rapports de tests...'
-            junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+        stage('MVN PACKAGE') {
+            steps {
+                sh 'mvn package -DskipTests'
+            }
         }
-        success {
-            echo 'BUILD RÉUSSI ! Le JAR est archivé et disponible dans Jenkins.'
+
+        stage('DOCKER BUILD & PUSH') {
+            steps {
+                script {
+                    def image = docker.build("${DOCKER_IMAGE}:latest")
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub-credentials-id') {
+                        image.push()
+                    }
+                }
+            }
         }
-        failure {
-            echo 'ÉCHEC DU BUILD. Vérifiez les logs ci-dessus.'
+
+        stage('MVN SONARQUBE') {
+            steps {
+                withSonarQubeEnv('MySonarQube') {
+                    sh 'mvn sonar:sonar -DskipTests'
+                }
+            }
+        }
+
+        stage('Déploiement Kubernetes') {
+            steps {
+                echo "Déploiement de l'application sur Kubernetes"
+                sh 'kubectl apply -f kubernetes/mysql-deployment.yaml'
+                sh 'kubectl rollout status deployment/mysql -n devops --timeout=300s'
+
+                sh 'kubectl apply -f kubernetes/spring-deployment.yaml'
+                sh 'kubectl rollout status deployment/stationskicontainer -n devops --timeout=300s'
+
+                sh 'kubectl get all -n devops'
+            }
         }
     }
 }
